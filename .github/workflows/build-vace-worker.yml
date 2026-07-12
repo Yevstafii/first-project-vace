@@ -25,4 +25,4 @@ jobs:
         with:
           context: ./vace-worker
           push: true
-          tags: ghcr.io/${{ github.repository_owner }}/first-project-vace-worker:latest
+          tags: ghcr.io/yevstafii/first-project-vace-worker:latest
