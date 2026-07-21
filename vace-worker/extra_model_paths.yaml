@@ -1,0 +1,14 @@
+# The RunPod Network Volume is mounted at /runpod-volume.  Keeping every model
+# outside the image makes cold-start images smaller and keeps checkpoints
+# reusable across worker image releases.
+runpod_network_volume:
+  base_path: /runpod-volume/models
+  checkpoints: checkpoints
+  diffusion_models: diffusion_models
+  text_encoders: text_encoders
+  vae: vae
+  loras: loras
+  clip_vision: clip_vision
+  controlnet: controlnet
+  embeddings: embeddings
+  upscale_models: upscale_models

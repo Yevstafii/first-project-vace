@@ -1,10 +1,10 @@
 # VACE Serverless Worker
 
-This image extends RunPod's ComfyUI Serverless worker with video input/output
-nodes. Wan VACE model files are not baked into the image. RunPod mounts them
-from the Network Volume at `/runpod-volume/models/`.
+This image runs the VACE inpainting video workflow on RunPod Serverless with
+ComfyUI. Large model files stay on the mounted Network Volume instead of the
+container image.
 
-Required model layout:
+## Required Network Volume layout
 
 ```text
 /runpod-volume/models/diffusion_models/wan2.1_vace_14B_fp16.safetensors
@@ -12,6 +12,22 @@ Required model layout:
 /runpod-volume/models/vae/wan_2.1_vae.safetensors
 ```
 
-The API workflow will be exported from ComfyUI after the first interactive VACE
-validation, then stored beside this Dockerfile before production deployment.
+At first execution, the handler also downloads the SAM3 detector checkpoint to
+`/runpod-volume/models/checkpoints/`, where it is reused by later workers.
 
+## Input contract
+
+The handler accepts a JSON payload with:
+
+```json
+{
+  "input": {
+    "video_url": "https://example.com/source.mp4",
+    "prompt": "red dress"
+  }
+}
+```
+
+It downloads the video, runs the bundled official VACE inpainting workflow and
+returns the finished MP4 as base64 in `output.video.data`. The API service
+persists that output and exposes it through its job download endpoint.
