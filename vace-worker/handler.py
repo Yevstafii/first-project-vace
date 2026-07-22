@@ -163,9 +163,22 @@ class WorkflowFlattener:
             }
 
         outputs: dict[int, NodeOutput | None] = {}
-        output_node = nodes.get(output_node_id, {})
-        for slot, output_input in enumerate(output_node.get("inputs", [])):
-            outputs[slot] = source_for_link(output_input.get("link"))
+        # ComfyUI's current workflow JSON represents subgraph outputs outside
+        # ``nodes``.  Each descriptor points back to the subgraph's virtual
+        # output node through ``linkIds``.  Older exports still embed that node
+        # in ``nodes``, so retain that form as a fallback.
+        output_descriptors = graph.get("outputs")
+        if isinstance(output_descriptors, list) and output_descriptors:
+            for slot, descriptor in enumerate(output_descriptors):
+                link_ids = descriptor.get("linkIds", [])
+                if not isinstance(link_ids, list):
+                    link_ids = [link_ids]
+                link_id = next((link for link in link_ids if link is not None), None)
+                outputs[slot] = source_for_link(link_id)
+        else:
+            output_node = nodes.get(output_node_id, {})
+            for slot, output_input in enumerate(output_node.get("inputs", [])):
+                outputs[slot] = source_for_link(output_input.get("link"))
         self.expanded_subgraphs[path] = outputs
         return outputs
 
@@ -228,7 +241,11 @@ def build_prompt(prompt: str, input_filename: str) -> dict[str, Any]:
     # The official workflow's defaults are suitable for the first acceptance
     # test once we replace the demo media and prompt.  A 49-frame, 640px test
     # keeps the first live run within a conservative A100 memory budget.
-    workflow["209"]["inputs"]["video"] = input_filename
+    # LoadVideo takes a filename from ComfyUI's input directory.  Its output is
+    # the VIDEO object wired into the VACE subgraph; assigning the filename to
+    # a downstream ``video`` input turns it into a raw string instead.
+    workflow["209"]["inputs"]["file"] = input_filename
+    workflow["209"]["inputs"].pop("video", None)
     workflow["306/280"]["inputs"]["text"] = prompt
     workflow["306/268/237"]["inputs"]["text"] = "dress"
     workflow["306/289"]["inputs"]["length"] = 49
@@ -271,8 +288,18 @@ def wait_for_history(prompt_id: str) -> dict[str, Any]:
         response = requests.get(f"{COMFY_URL}/history/{prompt_id}", timeout=30)
         response.raise_for_status()
         history = response.json().get(prompt_id)
-        if history and history.get("outputs"):
-            return history
+        if history:
+            outputs = history.get("outputs") or {}
+            if outputs:
+                return history
+            status = history.get("status") or {}
+            if status.get("completed") or status.get("status_str") in {"error", "failed"}:
+                messages = status.get("messages") or []
+                detail = messages[-1] if messages else "no output was produced"
+                raise RuntimeError(
+                    "ComfyUI execution failed: "
+                    + json.dumps(detail, ensure_ascii=False)
+                )
         time.sleep(2)
     raise TimeoutError("VACE workflow exceeded the execution timeout")
 
