@@ -235,6 +235,9 @@ def build_prompt(prompt: str, input_filename: str) -> dict[str, Any]:
     workflow["306/290"]["inputs"]["value"] = 640
     workflow["306/297"]["inputs"]["value"] = 640
     workflow["306/300"]["inputs"]["value"] = False
+    # The workflow export predates ComfyUI's required codec input.  API prompts
+    # do not inherit UI defaults, so make the documented "auto" choice explicit.
+    workflow["69"]["inputs"]["codec"] = "auto"
 
     # The network volume deliberately does not contain the optional Lightning
     # LoRA.  Bypass it entirely instead of merely toggling a UI switch.
