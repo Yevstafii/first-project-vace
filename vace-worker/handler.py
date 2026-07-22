@@ -85,6 +85,23 @@ class WorkflowFlattener:
             return []
         return values if isinstance(values, list) else [values]
 
+    @staticmethod
+    def _uses_widget(input_config: Any) -> bool:
+        """Return whether a ComfyUI API input consumes a UI widget value."""
+        if not isinstance(input_config, (list, tuple)) or not input_config:
+            return False
+        kind = input_config[0]
+        if isinstance(kind, (list, tuple)):
+            return True  # COMBO options are serialized as a list.
+        if kind in {"INT", "FLOAT", "STRING", "BOOLEAN", "COMBO", "NUMBER"}:
+            return True
+        if len(input_config) > 1 and isinstance(input_config[1], dict):
+            return any(
+                key in input_config[1]
+                for key in ("default", "min", "max", "step", "multiline")
+            )
+        return False
+
     def _expand(
         self,
         graph: dict[str, Any],
@@ -112,9 +129,17 @@ class WorkflowFlattener:
                 child = expanded_children.get(source_id)
                 if child is None:
                     child_bindings: dict[int, NodeOutput | None] = {}
-                    for index, _ in enumerate(self.subgraphs[source_type].get("inputs", [])):
-                        parent_input = source_node.get("inputs", [])
-                        parent_link = parent_input[index].get("link") if index < len(parent_input) else None
+                    parent_inputs = {
+                        item.get("name"): item
+                        for item in source_node.get("inputs", [])
+                        if item.get("name")
+                    }
+                    for index, child_input in enumerate(self.subgraphs[source_type].get("inputs", [])):
+                        # Hidden subgraph inputs (for example a seed) may be
+                        # omitted from the parent node.  Their positions then
+                        # differ, so wiring by index shifts every later input.
+                        parent_input = parent_inputs.get(child_input.get("name"), {})
+                        parent_link = parent_input.get("link")
                         child_bindings[index] = source_for_link(parent_link)
                     child_path = self._node_id(path, source_id)
                     child = self._expand(self.subgraphs[source_type], child_path, child_bindings)
@@ -146,15 +171,20 @@ class WorkflowFlattener:
             required = self.object_info.get(node_type, {}).get("input", {}).get("required", {})
             values = self._widget_values(node)
             value_index = 0
-            for name in required:
-                if name in linked_names:
+            for name, input_config in required.items():
+                # ``widgets_values`` keeps values for linked widgets too.  We
+                # must consume those positions even though the API prompt uses
+                # a graph link, otherwise every subsequent widget is shifted.
+                if not self._uses_widget(input_config):
                     continue
-                while value_index < len(values) and values[value_index] in CONTROL_WIDGET_VALUES:
-                    value_index += 1
                 if value_index >= len(values):
                     continue
-                api_inputs[name] = values[value_index]
+                value = values[value_index]
                 value_index += 1
+                while value_index < len(values) and values[value_index] in CONTROL_WIDGET_VALUES:
+                    value_index += 1
+                if name not in linked_names:
+                    api_inputs[name] = value
 
             self.result[self._node_id(path, node_id)] = {
                 "class_type": node_type,
