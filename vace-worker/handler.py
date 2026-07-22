@@ -283,15 +283,16 @@ def build_prompt(prompt: str, input_filename: str) -> dict[str, Any]:
     workflow["306/297"]["inputs"]["value"] = 640
     workflow["306/300"]["inputs"]["value"] = False
 
-    # ``ResizeImageMaskNode`` is a composite ComfyUI control: its UI serializes
-    # the resize-mode selector before the ordinary API inputs, while
-    # ``/object_info`` lists ``scale_method`` first.  The generic widget mapper
-    # therefore cannot recover this particular control's order.  Pin the two
-    # unlinked options from the official workflow explicitly; width and height
-    # remain linked to the workflow's calculated 640px values above.
+    # ``ResizeImageMaskNode`` is a composite ComfyUI control.  The prompt API
+    # needs its selected DynamicCombo parent plus namespaced child values; the
+    # generic widget mapper only sees the child fields.  Pin the selection and
+    # its crop option explicitly.  Width and height remain linked to the
+    # workflow's calculated 640px values above.
     resize_inputs = workflow["306/293"]["inputs"]
+    resize_inputs["resize_type"] = "scale dimensions"
+    resize_inputs["resize_type.crop"] = "center"
     resize_inputs["scale_method"] = "area"
-    resize_inputs["crop"] = "center"
+    resize_inputs.pop("crop", None)
 
     # The workflow export predates ComfyUI's required codec input.  API prompts
     # do not inherit UI defaults, so make the documented "auto" choice explicit.
