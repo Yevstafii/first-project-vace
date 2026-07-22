@@ -18,6 +18,10 @@ RUN comfy-node-install https://github.com/Kosinkadink/ComfyUI-VideoHelperSuite \
         python -m pip install --no-cache-dir -r /comfyui/custom_nodes/ComfyUI-VideoHelperSuite/requirements.txt; \
     fi
 
+# VideoHelperSuite imports this package dynamically.  It is not present in the
+# base image and without it ComfyUI skips the video node module at startup.
+RUN python -m pip install --no-cache-dir imageio-ffmpeg
+
 COPY extra_model_paths.yaml /comfyui/extra_model_paths.yaml
 COPY official-vace-inpainting.workflow.json /opt/vace/official-vace-inpainting.workflow.json
 
@@ -29,4 +33,3 @@ COPY handler.py /handler.py
 # Fail the image build if a future ComfyUI or VideoHelperSuite update prevents
 # the worker from importing the VACE/SAM3 node graph.
 RUN cd /comfyui && python main.py --quick-test-for-ci --cpu
-
